@@ -2,11 +2,33 @@
 
 浏览器端 PDF 工具：合并、拆分、页面排序、旋转，以及将图片 / Word (.docx) / 文本 / Markdown 转为 PDF。所有处理在本地完成，文件不上传服务器。
 
+## 环境要求（本地开发与构建）
+
+| 项目 | 说明 |
+|------|------|
+| **Node.js** | **20.x 或更高**（与 CI 一致；18 可能可用，未做长期验证） |
+| **npm** | **10.x 或更高**（随 Node 20 LTS 安装） |
+| **操作系统** | Windows 10/11、macOS、Linux 均可 |
+| **浏览器** | 建议使用 **Chrome / Edge / Firefox** 等现代浏览器；Safari 一般可用，若预览异常可换 Chromium 系 |
+| **磁盘与网络** | 首次 `npm install` 需联网下载依赖；`node_modules` 约数百 MB |
+| **可选** | [Git](https://git-scm.com/) — 克隆与推送代码；[GitHub CLI](https://cli.github.com/) — 可选，用于 `gh` 命令 |
+
+验证版本：
+
+```bash
+node -v   # 应显示 v20.x.x 或更高
+npm -v    # 应显示 10.x.x 或更高
+```
+
+若本机 Node 版本过低，可到 [Node.js 官网](https://nodejs.org/) 安装 LTS，或使用 [nvm-windows](https://github.com/coreybutler/nvm-windows) / [fnm](https://github.com/Schniz/fnm) 管理多版本。
+
 ## 在线访问
 
-部署成功后访问：
+部署成功后访问（将用户名换成你的 GitHub 登录名）：
 
-**https://\<你的 GitHub 用户名\>.github.io/pdf-editor-web/**
+**https://你的用户名.github.io/pdf-editor-web/**
+
+示例：**https://crazytiy.github.io/pdf-editor-web/**
 
 ## 本地开发
 
