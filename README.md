@@ -28,10 +28,11 @@ npm run preview
 
 ## 部署到 GitHub Pages
 
-1. 在 GitHub 创建仓库 `pdf-editor-web`（公开仓库）。
-2. 推送本目录代码到 `main` 分支。
-3. 仓库 **Settings → Pages → Build and deployment** 选择 **GitHub Actions**。
-4. 推送后 Actions 会自动构建并发布；首次可在 Actions 页查看 `Deploy to GitHub Pages` 工作流。
+1. 推送代码到 `main` 分支后，Actions 会自动构建并推送到 `gh-pages` 分支。
+2. 仓库 **Settings → Pages → Build and deployment**：
+   - **Source** 选 **Deploy from a branch**
+   - **Branch** 选 **gh-pages** / **/ (root)**
+3. 保存后等待 1–2 分钟，访问 https://crazytiy.github.io/pdf-editor-web/
 
 ## 技术栈
 
