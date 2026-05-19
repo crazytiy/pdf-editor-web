@@ -404,6 +404,24 @@ function App() {
                 />
                 <div
                   className="page-thumb"
+                  style={
+                    page.viewportWidth && page.viewportHeight
+                      ? {
+                          aspectRatio: (() => {
+                            const rot = page.rotation;
+                            const w =
+                              rot === 90 || rot === 270
+                                ? page.viewportHeight!
+                                : page.viewportWidth!;
+                            const h =
+                              rot === 90 || rot === 270
+                                ? page.viewportWidth!
+                                : page.viewportHeight!;
+                            return `${w} / ${h}`;
+                          })(),
+                        }
+                      : undefined
+                  }
                   role="button"
                   tabIndex={0}
                   title="点击预览此页"

@@ -8,8 +8,7 @@ const FONT_URL = `${import.meta.env.BASE_URL}fonts/NotoSansSC-Regular.otf`;
 export const A4_WIDTH = 595.28;
 export const A4_HEIGHT = 841.89;
 
-const A4_SIZE_TOLERANCE = 2;
-const TITLE_BAR_HEIGHT = 28;
+export const TITLE_BAR_HEIGHT = 28;
 const TITLE_FONT_SIZE = 11;
 
 let fontBytesCache: ArrayBuffer | null = null;
@@ -29,54 +28,12 @@ export async function embedTitleFont(doc: PDFDocument): Promise<PDFFont> {
   return doc.embedFont(bytes);
 }
 
-function isA4Portrait(width: number, height: number): boolean {
-  return (
-    Math.abs(width - A4_WIDTH) < A4_SIZE_TOLERANCE &&
-    Math.abs(height - A4_HEIGHT) < A4_SIZE_TOLERANCE
-  );
-}
-
-/** 将页面规范为 A4 竖版：原内容等比缩放并居中（小页放大、大页或横页缩小） */
-function normalizePageToA4(page: PDFPage): void {
-  const { width, height } = page.getSize();
-  if (isA4Portrait(width, height)) return;
-
-  const scale = Math.min(A4_WIDTH / width, A4_HEIGHT / height);
-  const scaledW = width * scale;
-  const scaledH = height * scale;
-  const offsetX = (A4_WIDTH - scaledW) / 2;
-  const offsetY = (A4_HEIGHT - scaledH) / 2;
-
-  page.setSize(A4_WIDTH, A4_HEIGHT);
-  page.translateContent(offsetX, offsetY);
-  page.scaleContent(scale, scale);
-}
-
-/** 在 A4 页顶预留标题区：正文等比缩小至标题区下方 */
-function shrinkContentForTitle(page: PDFPage): void {
-  const { width, height } = page.getSize();
-  const scale = (height - TITLE_BAR_HEIGHT) / height;
-  const offsetX = (width * (1 - scale)) / 2;
-
-  page.translateContent(offsetX, 0);
-  page.scaleContent(scale, scale);
-}
-
-export function drawFileNameTitle(
-  page: PDFPage,
-  sourceFileName: string,
-  font: PDFFont,
-): void {
-  const title = getFileBaseName(sourceFileName);
-  if (!title) return;
-
-  normalizePageToA4(page);
-  shrinkContentForTitle(page);
-
+function drawTitleBar(page: PDFPage, title: string, font: PDFFont): void {
   const { width, height } = page.getSize();
   const textWidth = font.widthOfTextAtSize(title, TITLE_FONT_SIZE);
   const x = Math.max(8, (width - textWidth) / 2);
-  const y = height - TITLE_BAR_HEIGHT + (TITLE_BAR_HEIGHT - TITLE_FONT_SIZE) / 2 - 2;
+  const y =
+    height - TITLE_BAR_HEIGHT + (TITLE_BAR_HEIGHT - TITLE_FONT_SIZE) / 2 - 2;
 
   page.drawRectangle({
     x: 0,
@@ -100,4 +57,28 @@ export function drawFileNameTitle(
     font,
     color: rgb(0.2, 0.2, 0.22),
   });
+}
+
+/**
+ * 在全新 A4 页上绘制标题，并将源页内容等比缩放嵌入标题区下方（不改动源页流）。
+ */
+export async function composeA4PageWithTitle(
+  doc: PDFDocument,
+  targetPage: PDFPage,
+  sourcePage: PDFPage,
+  sourceFileName: string,
+  font: PDFFont,
+): Promise<void> {
+  const title = getFileBaseName(sourceFileName);
+  if (title) drawTitleBar(targetPage, title, font);
+
+  const embedded = await doc.embedPage(sourcePage);
+  const contentH = A4_HEIGHT - TITLE_BAR_HEIGHT;
+  const scale = Math.min(A4_WIDTH / embedded.width, contentH / embedded.height);
+  const dw = embedded.width * scale;
+  const dh = embedded.height * scale;
+  const x = (A4_WIDTH - dw) / 2;
+  const y = (contentH - dh) / 2;
+
+  targetPage.drawPage(embedded, { x, y, width: dw, height: dh });
 }

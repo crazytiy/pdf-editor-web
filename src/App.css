@@ -269,7 +269,7 @@
 }
 
 .page-thumb {
-  aspect-ratio: 210 / 297;
+  aspect-ratio: 210 / 297; /* 无 viewport 尺寸时的默认 A4 竖版 */
   background: #fff;
   display: flex;
   align-items: center;

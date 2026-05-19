@@ -1,4 +1,4 @@
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, type PDFImage, type PDFPage } from 'pdf-lib';
 import html2canvas from 'html2canvas';
 import mammoth from 'mammoth';
 import { marked } from 'marked';
@@ -109,7 +109,7 @@ async function convertImageToPdf(file: File): Promise<Uint8Array> {
   const iw = image.width;
   const ih = image.height;
 
-  const scale = Math.min(A4_W / iw, A4_H / ih, 1);
+  const scale = Math.min(A4_W / iw, A4_H / ih);
   const dw = iw * scale;
   const dh = ih * scale;
   const page = pdf.addPage([A4_W, A4_H]);
@@ -120,6 +120,17 @@ async function convertImageToPdf(file: File): Promise<Uint8Array> {
     height: dh,
   });
   return pdf.save();
+}
+
+function drawRasterOnA4Page(page: PDFPage, img: PDFImage): void {
+  const imgScale = A4_W / img.width;
+  const drawH = img.height * imgScale;
+  page.drawImage(img, {
+    x: 0,
+    y: A4_H - drawH,
+    width: A4_W,
+    height: drawH,
+  });
 }
 
 async function renderContainerToPdf(container: HTMLElement): Promise<Uint8Array> {
@@ -139,10 +150,7 @@ async function renderContainerToPdf(container: HTMLElement): Promise<Uint8Array>
     const png = await canvasToPngBytes(fullCanvas);
     const img = await pdf.embedPng(png);
     const page = pdf.addPage([A4_W, A4_H]);
-    const imgScale = Math.min(A4_W / img.width, A4_H / img.height);
-    const w = img.width * imgScale;
-    const h = img.height * imgScale;
-    page.drawImage(img, { x: 0, y: A4_H - h, width: w, height: h });
+    drawRasterOnA4Page(page, img);
     return pdf.save();
   }
 
@@ -159,14 +167,7 @@ async function renderContainerToPdf(container: HTMLElement): Promise<Uint8Array>
     const png = await canvasToPngBytes(slice);
     const img = await pdf.embedPng(png);
     const page = pdf.addPage([A4_W, A4_H]);
-    const imgScale = A4_W / img.width;
-    const drawH = img.height * imgScale;
-    page.drawImage(img, {
-      x: 0,
-      y: A4_H - drawH,
-      width: A4_W,
-      height: drawH,
-    });
+    drawRasterOnA4Page(page, img);
     y += sliceHeight;
   }
 

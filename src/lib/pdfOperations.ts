@@ -1,5 +1,5 @@
 import { PDFDocument, degrees } from 'pdf-lib';
-import { drawFileNameTitle, embedTitleFont } from './pdfTitle';
+import { A4_HEIGHT, A4_WIDTH, composeA4PageWithTitle, embedTitleFont } from './pdfTitle';
 import { pdfjs } from './pdfWorker';
 import type { PdfPageItem } from '../types';
 
@@ -23,25 +23,30 @@ async function renderPageToDataUrl(
   pageIndex: number,
   scale: number,
   quality = 0.82,
-): Promise<string> {
+): Promise<{ dataUrl: string; width: number; height: number }> {
   const loadingTask = pdfjs.getDocument({ data: bytes.slice() });
   const pdf = await loadingTask.promise;
   const page = await pdf.getPage(pageIndex + 1);
   const viewport = page.getViewport({ scale });
+  const base = page.getViewport({ scale: 1 });
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return '';
+  if (!ctx) return { dataUrl: '', width: base.width, height: base.height };
   await page.render({ canvasContext: ctx, viewport }).promise;
-  return canvas.toDataURL('image/jpeg', quality);
+  return {
+    dataUrl: canvas.toDataURL('image/jpeg', quality),
+    width: base.width,
+    height: base.height,
+  };
 }
 
 export async function renderThumbnail(
   bytes: Uint8Array,
   pageIndex: number,
   scale = 0.35,
-): Promise<string> {
+): Promise<{ dataUrl: string; width: number; height: number }> {
   return renderPageToDataUrl(bytes, pageIndex, scale);
 }
 
@@ -51,7 +56,8 @@ export async function renderPagePreview(
   pageIndex: number,
   scale = 1.25,
 ): Promise<string> {
-  return renderPageToDataUrl(bytes, pageIndex, scale, 0.92);
+  const { dataUrl } = await renderPageToDataUrl(bytes, pageIndex, scale, 0.92);
+  return dataUrl;
 }
 
 export async function buildPagesFromFile(
@@ -62,14 +68,16 @@ export async function buildPagesFromFile(
   const count = await getPageCount(bytes);
   const pages: PdfPageItem[] = [];
   for (let i = 0; i < count; i++) {
-    const thumb = await renderThumbnail(bytes, i);
+    const { dataUrl, width, height } = await renderThumbnail(bytes, i);
     pages.push({
       id: crypto.randomUUID(),
       sourceFileId: fileId,
       sourceFileName: fileName,
       sourcePageIndex: i,
       rotation: 0,
-      thumbnail: thumb,
+      thumbnail: dataUrl,
+      viewportWidth: width,
+      viewportHeight: height,
     });
   }
   return pages;
@@ -94,16 +102,25 @@ export async function exportPages(
       cache.set(item.sourceFileId, src);
     }
     const [copied] = await out.copyPages(src, [item.sourcePageIndex]);
-    if (item.rotation !== 0) {
-      copied.setRotation(degrees(item.rotation));
-    }
-    out.addPage(copied);
-    if (
+    const needsTitle =
       titleFont &&
       item.sourcePageIndex === 0 &&
-      item.rotation === 0
-    ) {
-      drawFileNameTitle(copied, item.sourceFileName, titleFont);
+      item.rotation === 0;
+
+    if (needsTitle) {
+      const titlePage = out.addPage([A4_WIDTH, A4_HEIGHT]);
+      await composeA4PageWithTitle(
+        out,
+        titlePage,
+        copied,
+        item.sourceFileName,
+        titleFont,
+      );
+    } else {
+      if (item.rotation !== 0) {
+        copied.setRotation(degrees(item.rotation));
+      }
+      out.addPage(copied);
     }
   }
 
