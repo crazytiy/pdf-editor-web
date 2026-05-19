@@ -40,14 +40,7 @@ function drawTitleBar(page: PDFPage, title: string, font: PDFFont): void {
     y: height - TITLE_BAR_HEIGHT,
     width,
     height: TITLE_BAR_HEIGHT,
-    color: rgb(0.97, 0.97, 0.98),
-  });
-
-  page.drawLine({
-    start: { x: 0, y: height - TITLE_BAR_HEIGHT },
-    end: { x: width, y: height - TITLE_BAR_HEIGHT },
-    thickness: 0.5,
-    color: rgb(0.82, 0.84, 0.88),
+    color: rgb(1, 1, 1),
   });
 
   page.drawText(title, {
