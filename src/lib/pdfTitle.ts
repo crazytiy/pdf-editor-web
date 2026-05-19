@@ -4,6 +4,11 @@ import { getFileBaseName } from './fileName';
 
 const FONT_URL = `${import.meta.env.BASE_URL}fonts/NotoSansSC-Regular.otf`;
 
+/** A4 竖版（pt） */
+export const A4_WIDTH = 595.28;
+export const A4_HEIGHT = 841.89;
+
+const A4_SIZE_TOLERANCE = 2;
 const TITLE_BAR_HEIGHT = 28;
 const TITLE_FONT_SIZE = 11;
 
@@ -24,11 +29,32 @@ export async function embedTitleFont(doc: PDFDocument): Promise<PDFFont> {
   return doc.embedFont(bytes);
 }
 
-/** 缩小并下移原有内容，在顶部留出标题区（不遮挡正文） */
+function isA4Portrait(width: number, height: number): boolean {
+  return (
+    Math.abs(width - A4_WIDTH) < A4_SIZE_TOLERANCE &&
+    Math.abs(height - A4_HEIGHT) < A4_SIZE_TOLERANCE
+  );
+}
+
+/** 将页面规范为 A4 竖版：原内容等比缩放并居中（小页放大、大页或横页缩小） */
+function normalizePageToA4(page: PDFPage): void {
+  const { width, height } = page.getSize();
+  if (isA4Portrait(width, height)) return;
+
+  const scale = Math.min(A4_WIDTH / width, A4_HEIGHT / height);
+  const scaledW = width * scale;
+  const scaledH = height * scale;
+  const offsetX = (A4_WIDTH - scaledW) / 2;
+  const offsetY = (A4_HEIGHT - scaledH) / 2;
+
+  page.setSize(A4_WIDTH, A4_HEIGHT);
+  page.translateContent(offsetX, offsetY);
+  page.scaleContent(scale, scale);
+}
+
+/** 在 A4 页顶预留标题区：正文等比缩小至标题区下方 */
 function shrinkContentForTitle(page: PDFPage): void {
   const { width, height } = page.getSize();
-  if (height <= TITLE_BAR_HEIGHT + 40) return;
-
   const scale = (height - TITLE_BAR_HEIGHT) / height;
   const offsetX = (width * (1 - scale)) / 2;
 
@@ -44,6 +70,7 @@ export function drawFileNameTitle(
   const title = getFileBaseName(sourceFileName);
   if (!title) return;
 
+  normalizePageToA4(page);
   shrinkContentForTitle(page);
 
   const { width, height } = page.getSize();
