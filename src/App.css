@@ -56,6 +56,22 @@
   align-items: center;
 }
 
+.toolbar-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.toolbar-option input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .toolbar-divider {
   width: 1px;
   height: 28px;
@@ -66,8 +82,8 @@
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.9rem;
+  gap: 0.35rem;
+  padding: 0.45rem 0.7rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-2);
@@ -115,7 +131,7 @@
 .dropzone {
   border: 2px dashed var(--border);
   border-radius: var(--radius);
-  padding: 3rem 2rem;
+  padding: 2rem 1.5rem;
   text-align: center;
   background: var(--surface);
   transition: border-color 0.2s, background 0.2s;
@@ -150,6 +166,21 @@
   margin-top: 0.35rem !important;
   font-size: 0.8rem !important;
   opacity: 0.85;
+}
+
+.info-strip {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.85rem;
+  background: rgba(91, 141, 239, 0.06);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.info-strip p {
+  margin: 0;
 }
 
 .file-chip-converted {
@@ -244,6 +275,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  cursor: zoom-in;
 }
 
 .page-thumb img {
@@ -261,6 +293,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  cursor: pointer;
+}
+
+.page-meta:hover {
+  background: var(--surface-2);
 }
 
 .page-index {
@@ -283,6 +320,11 @@
   height: 20px;
   accent-color: var(--accent);
   z-index: 2;
+}
+
+.page-thumb:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .loading-overlay {

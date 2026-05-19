@@ -1,6 +1,12 @@
 import { PDFDocument, degrees } from 'pdf-lib';
+import { drawFileNameTitle, embedTitleFont } from './pdfTitle';
 import { pdfjs } from './pdfWorker';
 import type { PdfPageItem } from '../types';
+
+export type ExportOptions = {
+  /** 在每个源文件的第一页顶部绘制文件名（无路径、无后缀） */
+  addFileNameTitle?: boolean;
+};
 
 export async function loadPdfBytes(file: File): Promise<Uint8Array> {
   const buffer = await file.arrayBuffer();
@@ -12,10 +18,11 @@ export async function getPageCount(bytes: Uint8Array): Promise<number> {
   return doc.getPageCount();
 }
 
-export async function renderThumbnail(
+async function renderPageToDataUrl(
   bytes: Uint8Array,
   pageIndex: number,
-  scale = 0.35,
+  scale: number,
+  quality = 0.82,
 ): Promise<string> {
   const loadingTask = pdfjs.getDocument({ data: bytes.slice() });
   const pdf = await loadingTask.promise;
@@ -27,7 +34,24 @@ export async function renderThumbnail(
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
   await page.render({ canvasContext: ctx, viewport }).promise;
-  return canvas.toDataURL('image/jpeg', 0.82);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+export async function renderThumbnail(
+  bytes: Uint8Array,
+  pageIndex: number,
+  scale = 0.35,
+): Promise<string> {
+  return renderPageToDataUrl(bytes, pageIndex, scale);
+}
+
+/** 高清单页预览（弹窗用） */
+export async function renderPagePreview(
+  bytes: Uint8Array,
+  pageIndex: number,
+  scale = 1.25,
+): Promise<string> {
+  return renderPageToDataUrl(bytes, pageIndex, scale, 0.92);
 }
 
 export async function buildPagesFromFile(
@@ -54,9 +78,12 @@ export async function buildPagesFromFile(
 export async function exportPages(
   pages: PdfPageItem[],
   fileMap: Map<string, Uint8Array>,
+  options?: ExportOptions,
 ): Promise<Uint8Array> {
   const out = await PDFDocument.create();
   const cache = new Map<string, PDFDocument>();
+  const addTitle = options?.addFileNameTitle ?? false;
+  const titleFont = addTitle ? await embedTitleFont(out) : null;
 
   for (const item of pages) {
     let src = cache.get(item.sourceFileId);
@@ -71,6 +98,13 @@ export async function exportPages(
       copied.setRotation(degrees(item.rotation));
     }
     out.addPage(copied);
+    if (
+      titleFont &&
+      item.sourcePageIndex === 0 &&
+      item.rotation === 0
+    ) {
+      drawFileNameTitle(copied, item.sourceFileName, titleFont);
+    }
   }
 
   return out.save();

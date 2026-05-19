@@ -11,12 +11,20 @@ import {
 } from './lib/pdfOperations';
 import {
   ACCEPT_ATTR,
-  FORMAT_HINT,
   getFileKind,
   isSupportedFile,
 } from './lib/supportedFormats';
 import { syncFilesWithPages } from './lib/syncFiles';
+import PdfPreviewModal, { type PreviewMode } from './components/PdfPreviewModal';
 import './App.css';
+
+type PreviewState = {
+  open: boolean;
+  mode: PreviewMode;
+  pageIndex: number;
+  /** 指定预览的页面列表；未设置时使用全部 pages（单页预览） */
+  pages?: PdfPageItem[];
+} | null;
 
 function App() {
   const [files, setFiles] = useState<PdfFileItem[]>([]);
@@ -27,7 +35,31 @@ function App() {
   const [dragOver, setDragOver] = useState(false);
   const [dragPageId, setDragPageId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PreviewState>(null);
+  const [addFileNameTitle, setAddFileNameTitle] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const openPreview = (mode: PreviewMode, pageIndex = 0) => {
+    setPreview({ open: true, mode, pageIndex });
+  };
+
+  const openSelectedPreview = () => {
+    if (selected.size === 0) {
+      alert('请先选择要预览的页面');
+      return;
+    }
+    setPreview({
+      open: true,
+      mode: 'document',
+      pageIndex: 0,
+      pages: pages.filter((p) => selected.has(p.id)),
+    });
+  };
+
+  const closePreview = () => setPreview(null);
+
+  const getSelectedPages = (): PdfPageItem[] =>
+    pages.filter((p) => selected.has(p.id));
 
   const fileMap = useCallback(() => {
     const m = new Map<string, Uint8Array>();
@@ -104,11 +136,6 @@ function App() {
     else setSelected(new Set(pages.map((p) => p.id)));
   };
 
-  const getOrderedSelection = (): PdfPageItem[] => {
-    const sel = pages.filter((p) => selected.has(p.id));
-    return sel.length > 0 ? sel : pages;
-  };
-
   const deleteSelected = () => {
     if (selected.size === 0) return;
     const nextPages = pages.filter((p) => !selected.has(p.id));
@@ -148,12 +175,18 @@ function App() {
     });
   };
 
-  const handleExport = async (filename: string, exportPagesList: PdfPageItem[]) => {
+  const handleExport = async (
+    filename: string,
+    exportPagesList: PdfPageItem[],
+    withTitle = addFileNameTitle,
+  ) => {
     if (exportPagesList.length === 0) return;
     setLoading(true);
-    setLoadingText('正在生成 PDF…');
+    setLoadingText(withTitle ? '正在生成 PDF（含文件名标题）…' : '正在生成 PDF…');
     try {
-      const bytes = await exportPages(exportPagesList, fileMap());
+      const bytes = await exportPages(exportPagesList, fileMap(), {
+        addFileNameTitle: withTitle,
+      });
       downloadBytes(bytes, filename);
     } finally {
       setLoading(false);
@@ -161,35 +194,12 @@ function App() {
     }
   };
 
-  const downloadMerged = () => {
-    void handleExport('合并结果.pdf', pages);
-  };
-
-  const downloadSelected = () => {
-    const sel = getOrderedSelection();
-    void handleExport(
-      selected.size > 0 ? '选中页面.pdf' : '导出结果.pdf',
-      sel,
-    );
-  };
-
-  const splitSelected = async () => {
-    const sel = getOrderedSelection();
-    if (sel.length === 0) return;
-    setLoading(true);
-    setLoadingText('正在拆分…');
-    try {
-      if (sel.length === 1) {
-        const bytes = await exportPages(sel, fileMap());
-        downloadBytes(bytes, '拆分结果.pdf');
-      } else {
-        const parts = await splitEachPage(sel, fileMap());
-        await downloadZip(parts, '拆分页面.zip');
-      }
-    } finally {
-      setLoading(false);
-      setLoadingText('');
+  const mergeExportSelected = () => {
+    if (selected.size === 0) {
+      alert('请先选择要合并导出的页面');
+      return;
     }
+    void handleExport('合并结果.pdf', getSelectedPages(), addFileNameTitle);
   };
 
   const splitAllPages = async () => {
@@ -218,9 +228,16 @@ function App() {
     <div className="app">
       <header className="header">
         <h1>PDF 编辑器</h1>
-        <p>合并、拆分、调序，或将图片 / Word / 文本 / Markdown 转为 PDF</p>
-        <span className="privacy-badge">🔒 文件不会上传到服务器</span>
+        <p>合并、拆分、调序；支持多格式转 PDF</p>
+        <span className="privacy-badge">🔒 本地处理，不上传服务器</span>
       </header>
+
+      <div className="info-strip" aria-label="使用说明">
+        <p>
+          支持 PDF、图片、Word（.docx）、文本、Markdown，可多文件合并。Word
+          网页转换版式可能不准，高保真请先在 Word 另存为 PDF。
+        </p>
+      </div>
 
       <div
         className={`dropzone ${dragOver ? 'drag-over' : ''}`}
@@ -236,9 +253,8 @@ function App() {
         onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
       >
         <div className="dropzone-icon">📄</div>
-        <h2>点击或拖拽上传文件</h2>
-        <p>{FORMAT_HINT}</p>
-        <p className="dropzone-sub">支持多文件，可多次添加以实现合并</p>
+        <h2>上传文件</h2>
+        <p>点击或拖拽到此处</p>
         <input
           ref={fileInputRef}
           type="file"
@@ -265,29 +281,28 @@ function App() {
           <div className="toolbar">
             <div className="toolbar-group">
               <button type="button" className="btn" onClick={() => fileInputRef.current?.click()}>
-                ➕ 添加文件
+                添加
               </button>
               <button type="button" className="btn" onClick={selectAll}>
                 {selected.size === pages.length ? '取消全选' : '全选'}
               </button>
-            </div>
-            <div className="toolbar-divider" />
-            <div className="toolbar-group">
               <button
                 type="button"
                 className="btn"
                 disabled={selected.size === 0}
                 onClick={() => rotateSelected(90)}
+                title="顺时针旋转选中页"
               >
-                ↻ 顺时针
+                右转
               </button>
               <button
                 type="button"
                 className="btn"
                 disabled={selected.size === 0}
                 onClick={() => rotateSelected(-90)}
+                title="逆时针旋转选中页"
               >
-                ↺ 逆时针
+                左转
               </button>
               <button
                 type="button"
@@ -295,28 +310,49 @@ function App() {
                 disabled={selected.size === 0}
                 onClick={deleteSelected}
               >
-                🗑 删除选中
+                删除
               </button>
             </div>
             <div className="toolbar-divider" />
             <div className="toolbar-group">
-              <button type="button" className="btn btn-primary" onClick={downloadMerged}>
-                ⬇ 下载合并 PDF
+              <label className="toolbar-option" title="在每个源文件的第一页顶部绘制文件名（无后缀）">
+                <input
+                  type="checkbox"
+                  checked={addFileNameTitle}
+                  onChange={(e) => setAddFileNameTitle(e.target.checked)}
+                />
+                首顶文件名
+              </label>
+              <button
+                type="button"
+                className="btn"
+                disabled={selected.size === 0}
+                onClick={openSelectedPreview}
+                title="预览已选页面合并后的效果"
+              >
+                预览选中
               </button>
-              <button type="button" className="btn" onClick={downloadSelected}>
-                ⬇ 导出{selected.size > 0 ? '选中' : '全部'}页
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={selected.size === 0}
+                onClick={mergeExportSelected}
+                title="将已选页面合并导出为一个 PDF"
+              >
+                合并导出选中
               </button>
-              <button type="button" className="btn" onClick={() => void splitSelected()}>
-                ✂ 拆分选中
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void splitAllPages()}
+                title="每一页单独一个 PDF，打包为 ZIP"
+              >
+                逐页拆分ZIP
               </button>
-              <button type="button" className="btn" onClick={() => void splitAllPages()}>
-                ✂ 逐页拆分 ZIP
+              <button type="button" className="btn btn-danger" onClick={resetAll}>
+                清空
               </button>
             </div>
-            <div className="toolbar-divider" />
-            <button type="button" className="btn btn-danger" onClick={resetAll}>
-              清空
-            </button>
           </div>
 
           <div className="pages-header">
@@ -324,7 +360,7 @@ function App() {
             <span>
               共 {pages.length} 页
               {selected.size > 0 && ` · 已选 ${selected.size} 页`}
-              {' · 拖拽卡片可调整顺序'}
+              {' · 拖拽排序 · 点缩略图预览'}
             </span>
           </div>
 
@@ -358,7 +394,6 @@ function App() {
                   setDragPageId(null);
                   setDropTargetId(null);
                 }}
-                onClick={() => toggleSelect(page.id)}
               >
                 <input
                   type="checkbox"
@@ -367,7 +402,23 @@ function App() {
                   onChange={() => toggleSelect(page.id)}
                   onClick={(e) => e.stopPropagation()}
                 />
-                <div className="page-thumb">
+                <div
+                  className="page-thumb"
+                  role="button"
+                  tabIndex={0}
+                  title="点击预览此页"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openPreview('page', index);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openPreview('page', index);
+                    }
+                  }}
+                >
                   {page.thumbnail && (
                     <img
                       src={page.thumbnail}
@@ -377,7 +428,18 @@ function App() {
                     />
                   )}
                 </div>
-                <div className="page-meta">
+                <div
+                  className="page-meta"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleSelect(page.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSelect(page.id);
+                    }
+                  }}
+                >
                   <span className="page-index">#{index + 1}</span>
                   <span className="page-source" title={page.sourceFileName}>
                     {page.sourceFileName}
@@ -393,6 +455,17 @@ function App() {
         <p className="empty-hint">
           上传 PDF 或拖入图片、Word、文本、Markdown，自动转为 PDF 后可预览、排序、合并或拆分
         </p>
+      )}
+
+      {preview?.open && (
+        <PdfPreviewModal
+          open={preview.open}
+          mode={preview.mode}
+          pages={preview.pages ?? pages}
+          fileMap={fileMap()}
+          initialIndex={preview.pageIndex}
+          onClose={closePreview}
+        />
       )}
 
       {loading && (
