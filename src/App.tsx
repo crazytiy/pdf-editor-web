@@ -14,6 +14,7 @@ import {
   getFileKind,
   isSupportedFile,
 } from './lib/supportedFormats';
+import { withExportTimestamp } from './lib/fileName';
 import { syncFilesWithPages } from './lib/syncFiles';
 import PdfPreviewModal, { type PreviewMode } from './components/PdfPreviewModal';
 import './App.css';
@@ -199,7 +200,11 @@ function App() {
       alert('请先选择要合并导出的页面');
       return;
     }
-    void handleExport('合并结果.pdf', getSelectedPages(), addFileNameTitle);
+    void handleExport(
+      withExportTimestamp('合并结果.pdf'),
+      getSelectedPages(),
+      addFileNameTitle,
+    );
   };
 
   const splitAllPages = async () => {
@@ -208,7 +213,7 @@ function App() {
     setLoadingText('正在逐页拆分…');
     try {
       const parts = await splitEachPage(pages, fileMap());
-      await downloadZip(parts, '全部页面.zip');
+      await downloadZip(parts, withExportTimestamp('全部页面.zip'));
     } finally {
       setLoading(false);
       setLoadingText('');
