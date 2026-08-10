@@ -1,5 +1,5 @@
-import fontkit from '@pdf-lib/fontkit';
 import { type PDFDocument, type PDFFont, type PDFPage, rgb } from 'pdf-lib';
+import { registerPdfFontkit } from './pdfFontkit';
 import { getFileBaseName } from './fileName';
 
 const FONT_URL = `${import.meta.env.BASE_URL}fonts/NotoSansSC-Regular.otf`;
@@ -23,7 +23,7 @@ async function loadTitleFontBytes(): Promise<ArrayBuffer> {
 }
 
 export async function embedTitleFont(doc: PDFDocument): Promise<PDFFont> {
-  doc.registerFontkit(fontkit);
+  registerPdfFontkit(doc);
   const bytes = await loadTitleFontBytes();
   return doc.embedFont(bytes, { subset: true });
 }
