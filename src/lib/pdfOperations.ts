@@ -1,5 +1,6 @@
 import { PDFDocument, degrees } from 'pdf-lib';
 import { A4_HEIGHT, A4_WIDTH, composeA4PageWithTitle, embedTitleFont } from './pdfTitle';
+import { deduplicateEmbeddedFonts } from './fontDedup';
 import { pdfjs } from './pdfWorker';
 import type { PdfPageItem } from '../types';
 
@@ -124,6 +125,7 @@ export async function exportPages(
     }
   }
 
+  deduplicateEmbeddedFonts(out);
   return out.save();
 }
 
