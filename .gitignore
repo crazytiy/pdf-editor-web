@@ -5,3 +5,4 @@ dist
 tsconfig.tsbuildinfo
 gh-auth-out.txt
 gh-auth-err.txt
+.tmp-test
