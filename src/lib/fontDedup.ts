@@ -28,15 +28,25 @@ interface FontRecord {
 const isContainer = (v: unknown): v is PDFDict | PDFArray | PDFStream =>
   v instanceof PDFDict || v instanceof PDFArray || v instanceof PDFStream;
 
-/** 取出对象底层的 ES Map 字典（兼容 PDFDict 与 PDFStream 两类对象） */
+/** 取出对象底层的 ES Map 字典（兼容 PDFDict 与 PDFStream；经 unknown 绕过私有字段） */
 function getDictMap(obj: unknown): Map<PDFName, unknown> | null {
   if (!obj || typeof obj !== 'object') return null;
-  if (obj instanceof PDFDict) return obj.dict;
-  if (obj instanceof PDFStream) return obj.dict.dict;
+  if (obj instanceof PDFDict) {
+    return (obj as unknown as { dict: Map<PDFName, unknown> }).dict;
+  }
+  if (obj instanceof PDFStream) {
+    return (obj.dict as unknown as { dict: Map<PDFName, unknown> }).dict;
+  }
   const dict = (obj as { dict?: unknown }).dict;
-  if (dict instanceof PDFDict) return dict.dict;
+  if (dict instanceof PDFDict) {
+    return (dict as unknown as { dict: Map<PDFName, unknown> }).dict;
+  }
   if (dict instanceof Map) return dict as Map<PDFName, unknown>;
   return null;
+}
+
+function decodeStreamBytes(stream: PDFRawStream): Uint8Array {
+  return decodePDFRawStream(stream).decode();
 }
 
 function getEntry(map: Map<PDFName, unknown>, name: string): unknown {
@@ -67,7 +77,7 @@ function serializeStreamEntry(doc: PDFDocument, value: unknown): string {
   const obj = doc.context.lookup(value);
   if (!(obj instanceof PDFRawStream)) return 'R';
   try {
-    return 'S:' + bytesToLatin1(decodePDFRawStream(obj).getBytes());
+    return 'S:' + bytesToLatin1(decodeStreamBytes(obj));
   } catch {
     return 'S:?';
   }
@@ -123,7 +133,7 @@ function collectFonts(doc: PDFDocument): FontRecord[] {
     if (!(stream instanceof PDFRawStream)) continue;
     let data: Uint8Array;
     try {
-      data = decodePDFRawStream(stream).getBytes();
+      data = decodeStreamBytes(stream);
     } catch {
       continue;
     }

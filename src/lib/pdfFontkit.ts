@@ -1,4 +1,4 @@
-import fontkit from 'fontkit';
+import * as fontkit from 'fontkit';
 import type { PDFDocument } from 'pdf-lib';
 
 type StreamHandlers = Record<string, (...args: unknown[]) => void>;

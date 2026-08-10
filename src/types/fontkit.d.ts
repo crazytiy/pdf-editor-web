@@ -31,10 +31,9 @@ declare module 'fontkit' {
     getGlyph(glyphId: number, codePoints?: number[]): Glyph;
   }
 
-  export interface Fontkit {
-    create(buffer: Uint8Array, postscriptName?: string): Font;
-  }
-
-  const fontkit: Fontkit;
-  export default fontkit;
+  export function create(buffer: Uint8Array, postscriptName?: string): Font;
+  export function registerFormat(format: unknown): void;
+  export let logErrors: boolean;
+  export let defaultLanguage: string;
+  export function setDefaultLanguage(lang: string): void;
 }
