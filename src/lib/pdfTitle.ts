@@ -25,7 +25,7 @@ async function loadTitleFontBytes(): Promise<ArrayBuffer> {
 export async function embedTitleFont(doc: PDFDocument): Promise<PDFFont> {
   doc.registerFontkit(fontkit);
   const bytes = await loadTitleFontBytes();
-  return doc.embedFont(bytes);
+  return doc.embedFont(bytes, { subset: true });
 }
 
 function drawTitleBar(page: PDFPage, title: string, font: PDFFont): void {
