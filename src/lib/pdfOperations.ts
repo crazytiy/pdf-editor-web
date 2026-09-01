@@ -1,12 +1,33 @@
-import { PDFDocument, degrees } from 'pdf-lib';
-import { A4_HEIGHT, A4_WIDTH, composeA4PageWithTitle, embedTitleFont } from './pdfTitle';
+import {
+  PDFDict,
+  PDFDocument,
+  PDFFont,
+  PDFHexString,
+  PDFName,
+  PDFPage,
+  PDFRef,
+  StandardFonts,
+  degrees,
+  rgb,
+} from 'pdf-lib';
+import {
+  A4_HEIGHT,
+  A4_WIDTH,
+  composeA4PageWithTitle,
+  embedTitleFont,
+} from './pdfTitle';
 import { deduplicateEmbeddedFonts } from './fontDedup';
+import { getFileBaseName } from './fileName';
 import { pdfjs } from './pdfWorker';
 import type { PdfPageItem } from '../types';
 
 export type ExportOptions = {
   /** 在每个源文件的第一页顶部绘制文件名（无路径、无后缀） */
   addFileNameTitle?: boolean;
+  /** 在每页底部居中绘制页码；开启目录页时页码从正文第一页起算，目录页不计入 */
+  addPageNumbers?: boolean;
+  /** 在文档最前面插入一页「目录」，列出各文件标题及起始页码 */
+  addTocPage?: boolean;
 };
 
 export async function loadPdfBytes(file: File): Promise<Uint8Array> {
@@ -84,6 +105,104 @@ export async function buildPagesFromFile(
   return pages;
 }
 
+function wrapTocText(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
+  const lines: string[] = [];
+  let cur = '';
+  for (const ch of text) {
+    if (cur && font.widthOfTextAtSize(cur + ch, size) > maxWidth) {
+      lines.push(cur);
+      cur = ch;
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function drawTocPage(
+  page: PDFPage,
+  font: PDFFont,
+  entries: { title: string; pageNumber: number }[],
+): void {
+  const { width, height } = page.getSize();
+
+  const heading = '目  录';
+  const headingSize = 26;
+  const hw = font.widthOfTextAtSize(heading, headingSize);
+  page.drawText(heading, {
+    x: (width - hw) / 2,
+    y: height - 80,
+    size: headingSize,
+    font,
+    color: rgb(0.15, 0.15, 0.15),
+  });
+  page.drawLine({
+    start: { x: 90, y: height - 108 },
+    end: { x: width - 90, y: height - 108 },
+    thickness: 0.8,
+    color: rgb(0.3, 0.3, 0.3),
+  });
+
+  let y = height - 150;
+  for (const e of entries) {
+    const titleSize = 13;
+    const numSize = 12;
+    const maxWidth = width - 180;
+    const lines = wrapTocText(font, e.title, titleSize, maxWidth);
+    const firstLineY = y;
+    for (const line of lines) {
+      page.drawText(line, { x: 90, y, size: titleSize, font });
+      y -= 22;
+    }
+    const num = `第 ${e.pageNumber} 页`;
+    const nw = font.widthOfTextAtSize(num, numSize);
+    page.drawText(num, {
+      x: width - 90 - nw,
+      y: firstLineY + 2,
+      size: numSize,
+      font,
+    });
+    y -= 26;
+  }
+}
+
+function addOutlineToDoc(
+  doc: PDFDocument,
+  entries: { title: string; pageNumber: number }[],
+  tocPresent: boolean,
+): void {
+  const context = doc.context;
+  const pages = doc.getPages();
+  const childDicts: PDFDict[] = [];
+  const childRefs: PDFRef[] = [];
+  for (const e of entries) {
+    const pageIndex = tocPresent ? e.pageNumber : e.pageNumber - 1;
+    const page = pages[pageIndex];
+    if (!page) continue;
+    const dest = context.obj([page.ref, PDFName.of('XYZ'), null, null, null]);
+    const dict = context.obj({ Title: PDFHexString.fromText(e.title), Dest: dest });
+    const ref = context.register(dict);
+    childDicts.push(dict);
+    childRefs.push(ref);
+  }
+  if (childRefs.length === 0) return;
+  const rootRef = context.register(
+    context.obj({
+      Type: PDFName.of('Outlines'),
+      First: childRefs[0],
+      Last: childRefs[childRefs.length - 1],
+      Count: childRefs.length,
+    }),
+  );
+  childDicts.forEach((dict, i) => {
+    dict.set(PDFName.of('Parent'), rootRef);
+    if (i > 0) dict.set(PDFName.of('Prev'), childRefs[i - 1]);
+    if (i < childRefs.length - 1) dict.set(PDFName.of('Next'), childRefs[i + 1]);
+  });
+  doc.catalog.set(PDFName.of('Outlines'), rootRef);
+}
+
 export async function exportPages(
   pages: PdfPageItem[],
   fileMap: Map<string, Uint8Array>,
@@ -92,7 +211,32 @@ export async function exportPages(
   const out = await PDFDocument.create();
   const cache = new Map<string, PDFDocument>();
   const addTitle = options?.addFileNameTitle ?? false;
-  const titleFont = addTitle ? await embedTitleFont(out) : null;
+  const addNumbers = options?.addPageNumbers ?? false;
+  const addToc = options?.addTocPage ?? false;
+
+  const titleFont = addTitle || addToc ? await embedTitleFont(out) : null;
+  const numFont = addNumbers
+    ? await out.embedStandardFont(StandardFonts.Helvetica)
+    : null;
+
+  const tocEntries: { title: string; pageNumber: number }[] = [];
+  const tocByFile = new Map<string, number>();
+  let pageNumber = 0;
+
+  const drawPageNumber = (page: PDFPage) => {
+    if (!numFont) return;
+    const { width } = page.getSize();
+    const label = `- ${pageNumber} -`;
+    const size = 9;
+    const w = numFont.widthOfTextAtSize(label, size);
+    page.drawText(label, {
+      x: (width - w) / 2,
+      y: 18,
+      size,
+      font: numFont,
+      color: rgb(0.55, 0.55, 0.55),
+    });
+  };
 
   for (const item of pages) {
     let src = cache.get(item.sourceFileId);
@@ -104,25 +248,40 @@ export async function exportPages(
     }
     const [copied] = await out.copyPages(src, [item.sourcePageIndex]);
     const needsTitle =
-      titleFont &&
-      item.sourcePageIndex === 0 &&
-      item.rotation === 0;
+      addTitle && item.sourcePageIndex === 0 && item.rotation === 0;
 
+    let target: PDFPage;
     if (needsTitle) {
-      const titlePage = out.addPage([A4_WIDTH, A4_HEIGHT]);
+      target = out.addPage([A4_WIDTH, A4_HEIGHT]);
       await composeA4PageWithTitle(
         out,
-        titlePage,
+        target,
         copied,
         item.sourceFileName,
-        titleFont,
+        titleFont!,
       );
     } else {
       if (item.rotation !== 0) {
         copied.setRotation(degrees(item.rotation));
       }
-      out.addPage(copied);
+      target = out.addPage(copied);
     }
+
+    pageNumber += 1;
+    if (!tocByFile.has(item.sourceFileId)) {
+      tocByFile.set(item.sourceFileId, pageNumber);
+      tocEntries.push({
+        title: getFileBaseName(item.sourceFileName),
+        pageNumber,
+      });
+    }
+    drawPageNumber(target);
+  }
+
+  if (addToc && titleFont && tocEntries.length > 0) {
+    out.insertPage(0, [A4_WIDTH, A4_HEIGHT]);
+    drawTocPage(out.getPage(0), titleFont, tocEntries);
+    addOutlineToDoc(out, tocEntries, true);
   }
 
   deduplicateEmbeddedFonts(out);
