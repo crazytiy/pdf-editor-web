@@ -38,6 +38,8 @@ function App() {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState>(null);
   const [addFileNameTitle, setAddFileNameTitle] = useState(false);
+  const [addPageNumbers, setAddPageNumbers] = useState(true);
+  const [addTocPage, setAddTocPage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const openPreview = (mode: PreviewMode, pageIndex = 0) => {
@@ -187,6 +189,8 @@ function App() {
     try {
       const bytes = await exportPages(exportPagesList, fileMap(), {
         addFileNameTitle: withTitle,
+        addPageNumbers,
+        addTocPage,
       });
       downloadBytes(bytes, filename);
     } finally {
@@ -327,6 +331,22 @@ function App() {
                   onChange={(e) => setAddFileNameTitle(e.target.checked)}
                 />
                 首顶文件名
+              </label>
+              <label className="toolbar-option" title="每页底部居中显示页码；开启目录页时页码从正文第一页起算，目录页不计入">
+                <input
+                  type="checkbox"
+                  checked={addPageNumbers}
+                  onChange={(e) => setAddPageNumbers(e.target.checked)}
+                />
+                页码
+              </label>
+              <label className="toolbar-option" title="在合并结果最前面插入一页目录，列出各文件标题及起始页码">
+                <input
+                  type="checkbox"
+                  checked={addTocPage}
+                  onChange={(e) => setAddTocPage(e.target.checked)}
+                />
+                目录页
               </label>
               <button
                 type="button"
